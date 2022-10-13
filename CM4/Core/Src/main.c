@@ -21,7 +21,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -31,6 +33,13 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define TIM_HANDLER						htim16
+#define TIM_INSTANCE					TIM16
+#define DBG_UART_HANDLER				&huart2
+#define DBG_UART_INSTANCE				USART2
+#define UART_TX_TIMEOUT					100
+#define UART_RX_MAX_BUFF_SIZE			100
+#define UART_TX_MAX_BUFF_SIZE			100
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -44,19 +53,31 @@ RTC_HandleTypeDef hrtc;
 TIM_HandleTypeDef htim16;
 
 UART_HandleTypeDef huart2;
+DMA_HandleTypeDef hdma_usart2_rx;
 
 /* USER CODE BEGIN PV */
-
+char             						uart_rx_buff[UART_RX_MAX_BUFF_SIZE] ;
+char             						uart_tx_buff[UART_TX_MAX_BUFF_SIZE] ;
+uint8_t									tim_on = 0 ;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_RTC_Init(void);
 static void MX_TIM16_Init(void);
 /* USER CODE BEGIN PFP */
-
+uint8_t				uart_cc 					( const char* , const char* ) ;
+void				set_dbg_uart				( uint8_t ) ;
+void 				tim_init 					( void ) ;
+void 				tim_start 					( void ) ;
+void 				clean_dbg_uart_rx_buff	 	( void ) ;
+void 				toggle_green 				( void ) ;
+void				toggle_led					( char ) ;
+HAL_StatusTypeDef 	send_2_dbg_uart 			( char* , int ) ;
+HAL_StatusTypeDef 	receive_swarm_uart_dma 		( void ) ;
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -92,6 +113,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_USART2_UART_Init();
   MX_RTC_Init();
   MX_TIM16_Init();
@@ -223,9 +245,9 @@ static void MX_TIM16_Init(void)
 
   /* USER CODE END TIM16_Init 1 */
   htim16.Instance = TIM16;
-  htim16.Init.Prescaler = 0;
+  htim16.Init.Prescaler = 4000;
   htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim16.Init.Period = 65535;
+  htim16.Init.Period = 1000;
   htim16.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim16.Init.RepetitionCounter = 0;
   htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -288,6 +310,23 @@ static void MX_USART2_UART_Init(void)
 }
 
 /**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMAMUX1_CLK_ENABLE();
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -303,6 +342,41 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+HAL_StatusTypeDef send_2_dbg_uart ( char* s , int l )
+{
+	return HAL_UART_Transmit ( DBG_UART_HANDLER , (uint8_t *) s , l , UART_TX_TIMEOUT ) ;
+}
+
+void tim_init ()
+{
+	__HAL_TIM_CLEAR_IT ( &TIM_HANDLER , TIM_IT_UPDATE ) ;
+}
+void tim_start ()
+{
+	HAL_TIM_Base_Start_IT ( &TIM_HANDLER ) ;
+	tim_on = 1 ;
+}
+void HAL_TIM_PeriodElapsedCallback ( TIM_HandleTypeDef *htim )
+{
+	if ( htim->Instance == TIM_INSTANCE )
+	{
+		HAL_TIM_Base_Stop_IT ( &TIM_HANDLER ) ;
+		tim_on = 0 ;
+	}
+}
+void toggle_led ( char c )
+{
+	/*
+	if ( c == 'b' )
+		HAL_GPIO_TogglePin ( BLUE_GPIO_Port , BLUE_Pin ) ;
+	if ( c == 'b' )
+		HAL_GPIO_TogglePin ( GREEN_GPIO_Port , GREEN_Pin ) ;
+	if ( c == 'o' )
+		HAL_GPIO_TogglePin ( ORANGE_GPIO_Port , ORANGE_Pin ) ;
+	*/
+	__NOP () ;
+}
+
 
 /* USER CODE END 4 */
 
